@@ -9,7 +9,7 @@
 	<url>http://maven.apache.org</url>
 
 	<properties>
-		<synapse.version>2013-05-21-05502ac-451</synapse.version>
+		<synapse.version>y.1-2-g778de65</synapse.version>
 	</properties>
 
 	<repositories>
