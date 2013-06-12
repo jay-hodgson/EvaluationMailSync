@@ -2,6 +2,7 @@ package org.synapse;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -40,12 +41,13 @@ public class EvaluationMailSyncer {
 	
 	static private Log log = LogFactory.getLog(EvaluationMailSyncer.class);
 	static private enum CurrentChallenges { HPN, TOXICOGENETICS, WHOLECELL, TEST };
+	static private final String OVERALL_DREAM_MAILCHIMP_LIST_ID = "8ef794accf";
 	
 	String mailChimpApiKey;
 	MailChimpClient mailChimpClient;
 	Synapse synapse;
 	Map<CurrentChallenges, String> challengeToMailChimpId;
-	Map<CurrentChallenges, String> challengeToEvaluationId;
+	Map<CurrentChallenges, List<String>> challengeToEvaluationId;
 	
 	public EvaluationMailSyncer(String mailChimpApiKey, String synapseUsername,
 			String synapsePassword) throws SynapseException {
@@ -64,21 +66,23 @@ public class EvaluationMailSyncer {
 		challengeToMailChimpId.put(CurrentChallenges.WHOLECELL, "5a2d90e13e");
 		challengeToMailChimpId.put(CurrentChallenges.TEST, "8c83f36742");
 		
-		challengeToEvaluationId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
-		challengeToEvaluationId.put(CurrentChallenges.HPN, "1867644");
-		challengeToEvaluationId.put(CurrentChallenges.TOXICOGENETICS, "1867645");
-		challengeToEvaluationId.put(CurrentChallenges.WHOLECELL, "1867647");
-		challengeToEvaluationId.put(CurrentChallenges.TEST, "1901529");
+		challengeToEvaluationId = new HashMap<EvaluationMailSyncer.CurrentChallenges, List<String>>();
+		challengeToEvaluationId.put(CurrentChallenges.HPN, Arrays.asList(new String[]{"1917801","1917802","1917803","1917804","1917805"}));
+		challengeToEvaluationId.put(CurrentChallenges.TOXICOGENETICS, Arrays.asList(new String[]{"1917695","1917696"}));
+		challengeToEvaluationId.put(CurrentChallenges.WHOLECELL, Arrays.asList(new String[]{"1867647"}));
+		challengeToEvaluationId.put(CurrentChallenges.TEST, Arrays.asList(new String[]{"1901529"}));
 		
 	}
 
 	public void sync() {		
 		for(CurrentChallenges challenge : CurrentChallenges.values()) {
-			try{		
-				Evaluation eval = synapse.getEvaluation(challengeToEvaluationId.get(challenge));
-				log.info("Processing: " + eval.getName());
-				int added = addUsersToEmailList(eval, challenge);
-				log.info("Emails added: " + added);
+			try{
+				for(String evalid : challengeToEvaluationId.get(challenge)) {
+					Evaluation eval = synapse.getEvaluation(evalid);
+					log.info("Processing: " + eval.getName());
+					int added = addUsersToEmailList(eval, challenge);
+					log.info("Emails added: " + added);
+				}
 			}catch (Throwable e){
 				// Something went wrong and we did not process the message.
 				log.error("Failed to process evaluation: " + challenge, e);
@@ -116,7 +120,6 @@ public class EvaluationMailSyncer {
 		while(offset < total) {
 			int toAdd = 0;
 			PaginatedResults<Participant> batch = synapse.getAllParticipants(evaluation.getId(), offset, limit);			
-			ListBatchSubscribeMethod subscribeRequest = new ListBatchSubscribeMethod();
 			List<MailChimpObject> mcBatch = new ArrayList<MailChimpObject>();
 			for(Participant participant : batch.getResults()) {
 				try {
@@ -136,21 +139,25 @@ public class EvaluationMailSyncer {
 					log.error("Error retrieving user: "+ participant.getUserId(), e);
 				}
 			}
-			subscribeRequest.apikey = mailChimpApiKey;
-			subscribeRequest.id = listId;
-			subscribeRequest.double_optin = false;
-			subscribeRequest.update_existing = true;
-			subscribeRequest.batch = mcBatch;
-			
-			try {
-				mailChimpClient.execute(subscribeRequest);
-				added += toAdd;
-			} catch (IOException e) {
-				log.error("Error updating MailChimp list for evaluation: " + evaluation.getId(), e);
-			} catch (MailChimpException e) {
-				log.error("Error updating MailChimp list for evaluation: " + evaluation.getId(), e);
-			}
-			
+
+			// add to list AND the overall Dream list
+			for(String id : new String[]{listId, OVERALL_DREAM_MAILCHIMP_LIST_ID}) {
+				ListBatchSubscribeMethod subscribeRequest = new ListBatchSubscribeMethod();
+				subscribeRequest.apikey = mailChimpApiKey;
+				subscribeRequest.id = id;
+				subscribeRequest.double_optin = false;
+				subscribeRequest.update_existing = true;
+				subscribeRequest.batch = mcBatch;
+				
+				try {
+					mailChimpClient.execute(subscribeRequest);
+					if(id != OVERALL_DREAM_MAILCHIMP_LIST_ID) added += toAdd;
+				} catch (IOException e) {
+					log.error("Error updating MailChimp list for evaluation: " + evaluation.getId(), e);
+				} catch (MailChimpException e) {
+					log.error("Error updating MailChimp list for evaluation: " + evaluation.getId(), e);
+				}
+			}			
 			offset += limit;
 		}
 		return added;
