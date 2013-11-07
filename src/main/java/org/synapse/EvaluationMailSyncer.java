@@ -11,25 +11,23 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.sagebionetworks.client.Synapse;
+import org.sagebionetworks.client.SynapseClient;
+import org.sagebionetworks.client.SynapseClientImpl;
 import org.sagebionetworks.client.exceptions.SynapseException;
-import org.sagebionetworks.evaluation.model.Evaluation;
-import org.sagebionetworks.evaluation.model.Participant;
 import org.sagebionetworks.repo.model.PaginatedResults;
-import org.sagebionetworks.repo.model.SchemaCache;
-import org.sagebionetworks.repo.model.UserGroup;
+import org.sagebionetworks.repo.model.Team;
+import org.sagebionetworks.repo.model.TeamMember;
 import org.sagebionetworks.repo.model.UserProfile;
 import org.sagebionetworks.repo.web.NotFoundException;
-import org.sagebionetworks.schema.ObjectSchema;
 
 import com.ecwid.mailchimp.MailChimpClient;
 import com.ecwid.mailchimp.MailChimpException;
 import com.ecwid.mailchimp.MailChimpObject;
-import com.ecwid.mailchimp.method.list.ListBatchSubscribeMethod;
-import com.ecwid.mailchimp.method.list.ListMembersMethod;
-import com.ecwid.mailchimp.method.list.ListMembersResult;
-import com.ecwid.mailchimp.method.list.MemberStatus;
-import com.ecwid.mailchimp.method.list.ShortMemberInfo;
+import com.ecwid.mailchimp.method.v1_3.list.ListBatchSubscribeMethod;
+import com.ecwid.mailchimp.method.v1_3.list.ListMembersMethod;
+import com.ecwid.mailchimp.method.v1_3.list.ListMembersResult;
+import com.ecwid.mailchimp.method.v1_3.list.MemberStatus;
+import com.ecwid.mailchimp.method.v1_3.list.ShortMemberInfo;
 
 /**
  * The worker that processes messages for Evaluation asynchronous jobs.
@@ -40,14 +38,14 @@ import com.ecwid.mailchimp.method.list.ShortMemberInfo;
 public class EvaluationMailSyncer {
 	
 	static private Log log = LogFactory.getLog(EvaluationMailSyncer.class);
-	static private enum CurrentChallenges { HPN, TOXICOGENETICS, WHOLECELL, TEST };
+	static private enum CurrentChallenges { AD1, RA, MUTCALL, TEST };
 	static private final String OVERALL_DREAM_MAILCHIMP_LIST_ID = "8ef794accf";
 	
 	String mailChimpApiKey;
 	MailChimpClient mailChimpClient;
-	Synapse synapse;
+	SynapseClient synapse;
 	Map<CurrentChallenges, String> challengeToMailChimpId;
-	Map<CurrentChallenges, List<String>> challengeToEvaluationId;
+	Map<CurrentChallenges, List<String>> challengeToTeamIds;
 	
 	public EvaluationMailSyncer(String mailChimpApiKey, String synapseUsername,
 			String synapsePassword) throws SynapseException {
@@ -57,30 +55,30 @@ public class EvaluationMailSyncer {
 		
 		this.mailChimpApiKey = mailChimpApiKey;
 		this.mailChimpClient = new MailChimpClient();
-		this.synapse = new Synapse();
+		this.synapse = new SynapseClientImpl();
 		synapse.login(synapseUsername, synapsePassword);
 		
 		challengeToMailChimpId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
-		challengeToMailChimpId.put(CurrentChallenges.HPN, "78979af628");
-		challengeToMailChimpId.put(CurrentChallenges.TOXICOGENETICS, "ca2a921c6f");
-		challengeToMailChimpId.put(CurrentChallenges.WHOLECELL, "5a2d90e13e");
+		challengeToMailChimpId.put(CurrentChallenges.AD1, "7f61028e0e");
+		challengeToMailChimpId.put(CurrentChallenges.RA, "3f8f9cadc5");
+		challengeToMailChimpId.put(CurrentChallenges.MUTCALL, "aa8f782347");
 		challengeToMailChimpId.put(CurrentChallenges.TEST, "8c83f36742");
-		
-		challengeToEvaluationId = new HashMap<EvaluationMailSyncer.CurrentChallenges, List<String>>();
-		challengeToEvaluationId.put(CurrentChallenges.HPN, Arrays.asList(new String[]{"1917801","1917802","1917803","1917804","1917805"}));
-		challengeToEvaluationId.put(CurrentChallenges.TOXICOGENETICS, Arrays.asList(new String[]{"1917695","1917696"}));
-		challengeToEvaluationId.put(CurrentChallenges.WHOLECELL, Arrays.asList(new String[]{"1867647"}));
-		challengeToEvaluationId.put(CurrentChallenges.TEST, Arrays.asList(new String[]{"1901529"}));
-		
+
+		challengeToTeamIds = new HashMap<EvaluationMailSyncer.CurrentChallenges, List<String>>();
+		challengeToTeamIds.put(CurrentChallenges.AD1, Arrays.asList(new String[]{ "" }));
+		challengeToTeamIds.put(CurrentChallenges.RA, Arrays.asList(new String[]{ "" }));
+		challengeToTeamIds.put(CurrentChallenges.MUTCALL, Arrays.asList(new String[]{ "" }));
+		challengeToTeamIds.put(CurrentChallenges.TEST, Arrays.asList(new String[]{ "" }));
+				
 	}
 
 	public void sync() {		
 		for(CurrentChallenges challenge : CurrentChallenges.values()) {
 			try{
-				for(String evalid : challengeToEvaluationId.get(challenge)) {
-					Evaluation eval = synapse.getEvaluation(evalid);
-					log.info("Processing: " + eval.getName());
-					int added = addUsersToEmailList(eval, challenge);
+				for(String teamId : challengeToTeamIds.get(challenge)) {
+					Team team = synapse.getTeam(teamId);
+					log.info("Processing: " + team.getName());
+					int added = addUsersToEmailList(team, challenge);
 					log.info("Emails added: " + added);
 				}
 			}catch (Throwable e){
@@ -98,7 +96,7 @@ public class EvaluationMailSyncer {
 
 	/**
 	 * Itempotent
-	 * @param evaluation
+	 * @param team
 	 * @param challenge 
 	 * @throws NotFoundException 
 	 * @throws MailChimpException 
@@ -106,37 +104,41 @@ public class EvaluationMailSyncer {
 	 * @throws SynapseException
 	 * @returns the number of emails added 
 	 */
-	private int addUsersToEmailList(Evaluation evaluation, CurrentChallenges challenge) throws NotFoundException, IOException, MailChimpException, SynapseException {
+	private int addUsersToEmailList(Team team, CurrentChallenges challenge) throws NotFoundException, IOException, MailChimpException, SynapseException {
 		int added = 0;
 		String listId = challengeToMailChimpId.get(challenge);
-		if(listId == null) throw getNotFoundException(evaluation);
+		if(listId == null) throw getNotFoundException(team);
 		
 		Set<String> listEmails = getAllListEmails(listId);				
 		
 		// get all participants in the competition and batch update new ones into the MailChimp list
-		long total = synapse.getParticipantCount(evaluation.getId());
+
+		long total = 1; // starting value
 		int offset = 0;
 		int limit = 100;
 		while(offset < total) {
 			int toAdd = 0;
-			PaginatedResults<Participant> batch = synapse.getAllParticipants(evaluation.getId(), offset, limit);			
+			PaginatedResults<TeamMember> batch = synapse.getTeamMembers(team.getId(), null, offset, limit);
+			total = batch.getTotalNumberOfResults();
 			List<MailChimpObject> mcBatch = new ArrayList<MailChimpObject>();
-			for(Participant participant : batch.getResults()) {
+			for(TeamMember participant : batch.getResults()) {
 				try {
 					// get user's email and if not in email list already, add
-					UserProfile userProfile = synapse.getUserProfile(participant.getUserId());
-					String participantEmail = userProfile.getEmail();
-					if(participantEmail != null && !listEmails.contains(participantEmail)) {
-						MailChimpObject obj = new MailChimpObject();
-						obj.put("EMAIL", participantEmail);					
-						obj.put("EMAIL_TYPE", "html");
-						obj.put("FNAME", userProfile.getFirstName());
-						obj.put("LNAME", userProfile.getLastName());
-						mcBatch.add(obj);
-						toAdd++;
+					if(participant.getMember().getIsIndividual()) {
+						UserProfile userProfile = synapse.getUserProfile(participant.getMember().getOwnerId());
+						String participantEmail = userProfile.getEmail();
+						if(participantEmail != null && !listEmails.contains(participantEmail)) {
+							MailChimpObject obj = new MailChimpObject();
+							obj.put("EMAIL", participantEmail);					
+							obj.put("EMAIL_TYPE", "html");
+							obj.put("FNAME", userProfile.getFirstName());
+							obj.put("LNAME", userProfile.getLastName());
+							mcBatch.add(obj);
+							toAdd++;
+						}
 					}
 				} catch (SynapseException e) {
-					log.error("Error retrieving user: "+ participant.getUserId(), e);
+					log.error("Error retrieving user: "+ participant.getMember().getOwnerId(), e);
 				}
 			}
 
@@ -153,9 +155,9 @@ public class EvaluationMailSyncer {
 					mailChimpClient.execute(subscribeRequest);
 					if(id != OVERALL_DREAM_MAILCHIMP_LIST_ID) added += toAdd;
 				} catch (IOException e) {
-					log.error("Error updating MailChimp list for evaluation: " + evaluation.getId(), e);
+					log.error("Error updating MailChimp list for evaluation: " + team.getId(), e);
 				} catch (MailChimpException e) {
-					log.error("Error updating MailChimp list for evaluation: " + evaluation.getId(), e);
+					log.error("Error updating MailChimp list for evaluation: " + team.getId(), e);
 				}
 			}			
 			offset += limit;
@@ -192,8 +194,8 @@ public class EvaluationMailSyncer {
 		return emails;
 	}
 	
-	private NotFoundException getNotFoundException(Evaluation evaluation) {
-		return new NotFoundException("Unknown mailing list for evaluation:" + evaluation.getId() + ", " + evaluation.getName());
+	private NotFoundException getNotFoundException(Team team) {
+		return new NotFoundException("Unknown mailing list for team:" + team.getId() + ", " + team.getName());
 	}
 
 }
