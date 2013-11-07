@@ -23,11 +23,11 @@ import org.sagebionetworks.repo.web.NotFoundException;
 import com.ecwid.mailchimp.MailChimpClient;
 import com.ecwid.mailchimp.MailChimpException;
 import com.ecwid.mailchimp.MailChimpObject;
-import com.ecwid.mailchimp.method.list.ListBatchSubscribeMethod;
-import com.ecwid.mailchimp.method.list.ListMembersMethod;
-import com.ecwid.mailchimp.method.list.ListMembersResult;
-import com.ecwid.mailchimp.method.list.MemberStatus;
-import com.ecwid.mailchimp.method.list.ShortMemberInfo;
+import com.ecwid.mailchimp.method.v1_3.list.ListBatchSubscribeMethod;
+import com.ecwid.mailchimp.method.v1_3.list.ListMembersMethod;
+import com.ecwid.mailchimp.method.v1_3.list.ListMembersResult;
+import com.ecwid.mailchimp.method.v1_3.list.MemberStatus;
+import com.ecwid.mailchimp.method.v1_3.list.ShortMemberInfo;
 
 /**
  * The worker that processes messages for Evaluation asynchronous jobs.
