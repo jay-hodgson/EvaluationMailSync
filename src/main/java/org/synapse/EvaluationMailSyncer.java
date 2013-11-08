@@ -24,6 +24,7 @@ import com.ecwid.mailchimp.MailChimpClient;
 import com.ecwid.mailchimp.MailChimpException;
 import com.ecwid.mailchimp.MailChimpObject;
 import com.ecwid.mailchimp.method.v1_3.list.ListBatchSubscribeMethod;
+import com.ecwid.mailchimp.method.v1_3.list.ListBatchUnsubscribeMethod;
 import com.ecwid.mailchimp.method.v1_3.list.ListMembersMethod;
 import com.ecwid.mailchimp.method.v1_3.list.ListMembersResult;
 import com.ecwid.mailchimp.method.v1_3.list.MemberStatus;
@@ -38,14 +39,17 @@ import com.ecwid.mailchimp.method.v1_3.list.ShortMemberInfo;
 public class EvaluationMailSyncer {
 	
 	static private Log log = LogFactory.getLog(EvaluationMailSyncer.class);
-	static private enum CurrentChallenges { AD1, RA, MUTCALL, TEST };
+	static private enum CurrentChallenges { AD1, RA, MUTCALL, TEST };	
 	static private final String OVERALL_DREAM_MAILCHIMP_LIST_ID = "8ef794accf";
 	
 	String mailChimpApiKey;
 	MailChimpClient mailChimpClient;
 	SynapseClient synapse;
 	Map<CurrentChallenges, String> challengeToMailChimpId;
-	Map<CurrentChallenges, List<String>> challengeToTeamIds;
+	Map<CurrentChallenges, List<String>> challengeToApprovedTeamIds;
+	Map<CurrentChallenges, String> challengeToUnapprovedMailChimpId;
+	Map<CurrentChallenges, String> challengeToAllRegisteredTeamId;
+	Map<CurrentChallenges, Set<String>> approvedUserEmails;
 	
 	public EvaluationMailSyncer(String mailChimpApiKey, String synapseUsername,
 			String synapsePassword) throws SynapseException {
@@ -58,37 +62,64 @@ public class EvaluationMailSyncer {
 		this.synapse = new SynapseClientImpl();
 		synapse.login(synapseUsername, synapsePassword);
 		
+		approvedUserEmails = new HashMap<EvaluationMailSyncer.CurrentChallenges, Set<String>>();
+		approvedUserEmails.put(CurrentChallenges.AD1, new HashSet<String>());
+		approvedUserEmails.put(CurrentChallenges.RA, new HashSet<String>());
+		approvedUserEmails.put(CurrentChallenges.MUTCALL, new HashSet<String>());
+		approvedUserEmails.put(CurrentChallenges.TEST, new HashSet<String>());
+		
 		challengeToMailChimpId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
 		challengeToMailChimpId.put(CurrentChallenges.AD1, "7f61028e0e");
 		challengeToMailChimpId.put(CurrentChallenges.RA, "3f8f9cadc5");
 		challengeToMailChimpId.put(CurrentChallenges.MUTCALL, "aa8f782347");
 		challengeToMailChimpId.put(CurrentChallenges.TEST, "8c83f36742");
 
-		challengeToTeamIds = new HashMap<EvaluationMailSyncer.CurrentChallenges, List<String>>();
-		challengeToTeamIds.put(CurrentChallenges.AD1, Arrays.asList(new String[]{ "" }));
-		challengeToTeamIds.put(CurrentChallenges.RA, Arrays.asList(new String[]{ "" }));
-		challengeToTeamIds.put(CurrentChallenges.MUTCALL, Arrays.asList(new String[]{ "" }));
-		challengeToTeamIds.put(CurrentChallenges.TEST, Arrays.asList(new String[]{ "" }));
-				
-	}
+		challengeToApprovedTeamIds = new HashMap<EvaluationMailSyncer.CurrentChallenges, List<String>>();
+		challengeToApprovedTeamIds.put(CurrentChallenges.AD1, Arrays.asList(new String[]{ "2223742" }));
+		challengeToApprovedTeamIds.put(CurrentChallenges.RA, Arrays.asList(new String[]{ "2223746" }));
+		challengeToApprovedTeamIds.put(CurrentChallenges.MUTCALL, Arrays.asList(new String[]{ "2223745" }));
+		challengeToApprovedTeamIds.put(CurrentChallenges.TEST, Arrays.asList(new String[]{ "2223779" }));
 
-	public void sync() {		
-		for(CurrentChallenges challenge : CurrentChallenges.values()) {
-			try{
-				for(String teamId : challengeToTeamIds.get(challenge)) {
-					Team team = synapse.getTeam(teamId);
-					log.info("Processing: " + team.getName());
-					int added = addUsersToEmailList(team, challenge);
-					log.info("Emails added: " + added);
-				}
-			}catch (Throwable e){
-				// Something went wrong and we did not process the message.
-				log.error("Failed to process evaluation: " + challenge, e);
-			}			
-		}
+		challengeToUnapprovedMailChimpId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
+		challengeToUnapprovedMailChimpId.put(CurrentChallenges.AD1, "644d60525c");
+		challengeToUnapprovedMailChimpId.put(CurrentChallenges.RA, "2fd37b3bf3");
+		challengeToUnapprovedMailChimpId.put(CurrentChallenges.MUTCALL, "48d7e03a2c");
+		challengeToUnapprovedMailChimpId.put(CurrentChallenges.TEST, "46c14b1884");
+		
+		challengeToAllRegisteredTeamId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
+		challengeToAllRegisteredTeamId.put(CurrentChallenges.AD1, "2223741");
+		challengeToAllRegisteredTeamId.put(CurrentChallenges.RA, "2223744");
+		challengeToAllRegisteredTeamId.put(CurrentChallenges.MUTCALL, "2223743");
+		challengeToAllRegisteredTeamId.put(CurrentChallenges.TEST, "2223780");
 		
 	}
 
+	public void sync() throws Exception {				
+		for(CurrentChallenges challenge : CurrentChallenges.values()) {
+			try{
+				// Sync all approved challenges
+				for(String teamId : challengeToApprovedTeamIds.get(challenge)) {
+					Team team = synapse.getTeam(teamId);
+					log.error("Processing: " + team.getName());
+					int added = addUsersToEmailList(team, challenge, true);
+					log.error("Emails added: " + added);
+				}
+
+				// update All Participants list
+				Team team = synapse.getTeam(challengeToAllRegisteredTeamId.get(challenge));
+				log.error("Processing: " + team.getName());
+				int added = addUsersToEmailList(team, challenge, false);
+				log.error("Emails added: " + added);
+
+				// now remove approved users from all participants list to make it an unapproved mailchimp list
+				deleteApproved(challenge);
+			} catch (Exception e){
+				// Something went wrong and we did not process the message.
+				log.error("Failed to process evaluation: " + challenge, e);
+				throw e;
+			}			
+		}		
+	}
 
 	/*
 	 * Private Methods
@@ -104,21 +135,21 @@ public class EvaluationMailSyncer {
 	 * @throws SynapseException
 	 * @returns the number of emails added 
 	 */
-	private int addUsersToEmailList(Team team, CurrentChallenges challenge) throws NotFoundException, IOException, MailChimpException, SynapseException {
+	private int addUsersToEmailList(Team team, CurrentChallenges challenge, boolean isApproved) throws NotFoundException, IOException, MailChimpException, SynapseException {
 		int added = 0;
-		String listId = challengeToMailChimpId.get(challenge);
+		String listId = isApproved ? challengeToMailChimpId.get(challenge) : challengeToUnapprovedMailChimpId.get(challenge);
 		if(listId == null) throw getNotFoundException(team);
 		
 		Set<String> listEmails = getAllListEmails(listId);				
 		
 		// get all participants in the competition and batch update new ones into the MailChimp list
 
-		long total = 1; // starting value
+		long total = Integer.MAX_VALUE; // starting value
 		int offset = 0;
 		int limit = 100;
 		while(offset < total) {
 			int toAdd = 0;
-			PaginatedResults<TeamMember> batch = synapse.getTeamMembers(team.getId(), null, offset, limit);
+			PaginatedResults<TeamMember> batch = synapse.getTeamMembers(team.getId(), null, limit, offset);
 			total = batch.getTotalNumberOfResults();
 			List<MailChimpObject> mcBatch = new ArrayList<MailChimpObject>();
 			for(TeamMember participant : batch.getResults()) {
@@ -126,8 +157,10 @@ public class EvaluationMailSyncer {
 					// get user's email and if not in email list already, add
 					if(participant.getMember().getIsIndividual()) {
 						UserProfile userProfile = synapse.getUserProfile(participant.getMember().getOwnerId());
-						String participantEmail = userProfile.getEmail();
+						String participantEmail = userProfile.getEmail();						
+						if(isApproved) approvedUserEmails.get(challenge).add(participantEmail); // add approved participants
 						if(participantEmail != null && !listEmails.contains(participantEmail)) {
+							if(!isApproved && approvedUserEmails.containsKey(participantEmail)) continue;
 							MailChimpObject obj = new MailChimpObject();
 							obj.put("EMAIL", participantEmail);					
 							obj.put("EMAIL_TYPE", "html");
@@ -148,17 +181,11 @@ public class EvaluationMailSyncer {
 				subscribeRequest.apikey = mailChimpApiKey;
 				subscribeRequest.id = id;
 				subscribeRequest.double_optin = false;
-				subscribeRequest.update_existing = true;
+				subscribeRequest.update_existing = false;
 				subscribeRequest.batch = mcBatch;
 				
-				try {
-					mailChimpClient.execute(subscribeRequest);
-					if(id != OVERALL_DREAM_MAILCHIMP_LIST_ID) added += toAdd;
-				} catch (IOException e) {
-					log.error("Error updating MailChimp list for evaluation: " + team.getId(), e);
-				} catch (MailChimpException e) {
-					log.error("Error updating MailChimp list for evaluation: " + team.getId(), e);
-				}
+				mailChimpClient.execute(subscribeRequest);
+				if(id != OVERALL_DREAM_MAILCHIMP_LIST_ID) added += toAdd;
 			}			
 			offset += limit;
 		}
@@ -172,7 +199,7 @@ public class EvaluationMailSyncer {
 		for(MemberStatus status : new MemberStatus[]{ MemberStatus.subscribed, MemberStatus.unsubscribed}) {
 			int offset = 0;
 			int limit = 100;
-			boolean done = false;
+			boolean done = false;	
 			while(!done) {
 				ListMembersMethod request = new ListMembersMethod();
 				request.apikey = mailChimpApiKey;
@@ -196,6 +223,20 @@ public class EvaluationMailSyncer {
 	
 	private NotFoundException getNotFoundException(Team team) {
 		return new NotFoundException("Unknown mailing list for team:" + team.getId() + ", " + team.getName());
+	}
+
+	private void deleteApproved(CurrentChallenges challenge)
+			throws IOException, MailChimpException {
+		String unApprovedMailChimpListId = challengeToUnapprovedMailChimpId.get(challenge);					
+		ListBatchUnsubscribeMethod deleteBatch = new ListBatchUnsubscribeMethod();
+		deleteBatch.apikey = mailChimpApiKey;
+		deleteBatch.id = unApprovedMailChimpListId;
+		deleteBatch.delete_member = true;
+		deleteBatch.emails = new ArrayList<String>(approvedUserEmails.get(challenge));
+		deleteBatch.send_goodbye = false;
+		deleteBatch.send_notify = false;
+		log.error("Unsubscribed already Approved: " + approvedUserEmails.get(challenge).size());
+		mailChimpClient.execute(deleteBatch);
 	}
 
 }
