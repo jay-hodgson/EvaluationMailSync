@@ -11,6 +11,7 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.sagebionetworks.StackConfiguration;
 import org.sagebionetworks.client.SynapseClient;
 import org.sagebionetworks.client.SynapseClientImpl;
 import org.sagebionetworks.client.exceptions.SynapseException;
@@ -59,7 +60,7 @@ public class EvaluationMailSyncer {
 		
 		this.mailChimpApiKey = mailChimpApiKey;
 		this.mailChimpClient = new MailChimpClient();
-		this.synapse = new SynapseClientImpl();
+		this.synapse = createSynapseClient();
 		synapse.login(synapseUsername, synapsePassword);
 		
 		approvedUserEmails = new HashMap<EvaluationMailSyncer.CurrentChallenges, Set<String>>();
@@ -95,7 +96,7 @@ public class EvaluationMailSyncer {
 	}
 
 	public void sync() throws Exception {				
-		for(CurrentChallenges challenge : CurrentChallenges.values()) {
+		for(CurrentChallenges challenge : challengeToMailChimpId.keySet()) {
 			try{
 				// Sync all approved challenges
 				for(String teamId : challengeToApprovedTeamIds.get(challenge)) {
@@ -157,7 +158,10 @@ public class EvaluationMailSyncer {
 					// get user's email and if not in email list already, add
 					if(participant.getMember().getIsIndividual()) {
 						UserProfile userProfile = synapse.getUserProfile(participant.getMember().getOwnerId());
-						String participantEmail = userProfile.getEmail();						
+						String participantEmail = userProfile.getEmail();
+						if(participantEmail == null && userProfile.getEmails() != null && userProfile.getEmails().size() > 0)
+							participantEmail = userProfile.getEmails().get(0);
+
 						if(isApproved) approvedUserEmails.get(challenge).add(participantEmail); // add approved participants
 						if(participantEmail != null && !listEmails.contains(participantEmail)) {
 							if(!isApproved && approvedUserEmails.containsKey(participantEmail)) continue;
@@ -237,6 +241,13 @@ public class EvaluationMailSyncer {
 		deleteBatch.send_notify = false;
 		log.error("Unsubscribed already Approved: " + approvedUserEmails.get(challenge).size());
 		mailChimpClient.execute(deleteBatch);
+	}
+
+	private SynapseClient createSynapseClient() {
+		SynapseClient synapseClient = new SynapseClientImpl();
+//		synapseClient.setRepositoryEndpoint(StackConfiguration.getRepositoryServiceEndpoint());
+//		synapseClient.setAuthEndpoint(StackConfiguration.getAuthenticationServicePublicEndpoint());
+		return synapseClient;
 	}
 
 }
