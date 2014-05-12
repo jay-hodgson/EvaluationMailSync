@@ -11,7 +11,6 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.sagebionetworks.StackConfiguration;
 import org.sagebionetworks.client.SynapseClient;
 import org.sagebionetworks.client.SynapseClientImpl;
 import org.sagebionetworks.client.exceptions.SynapseException;
@@ -40,7 +39,7 @@ import com.ecwid.mailchimp.method.v1_3.list.ShortMemberInfo;
 public class EvaluationMailSyncer {
 	
 	static private Log log = LogFactory.getLog(EvaluationMailSyncer.class);
-	static private enum CurrentChallenges { AD1, RA, MUTCALL, TEST, AML, BROAD_GE};	
+	static private enum CurrentChallenges { AML, BROAD_GE, TEST };	
 	static private final String OVERALL_DREAM_MAILCHIMP_LIST_ID = "8ef794accf";
 	
 	String mailChimpApiKey;
@@ -64,39 +63,27 @@ public class EvaluationMailSyncer {
 		synapse.login(synapseUsername, synapsePassword);
 		
 		approvedUserEmails = new HashMap<EvaluationMailSyncer.CurrentChallenges, Set<String>>();
-		approvedUserEmails.put(CurrentChallenges.AD1, new HashSet<String>());
-		approvedUserEmails.put(CurrentChallenges.RA, new HashSet<String>());
-		approvedUserEmails.put(CurrentChallenges.MUTCALL, new HashSet<String>());
 		approvedUserEmails.put(CurrentChallenges.TEST, new HashSet<String>());
+		approvedUserEmails.put(CurrentChallenges.AML, new HashSet<String>());
+		approvedUserEmails.put(CurrentChallenges.BROAD_GE, new HashSet<String>());
+
 		
 		challengeToMailChimpId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
-		challengeToMailChimpId.put(CurrentChallenges.AD1, "7f61028e0e");
-		challengeToMailChimpId.put(CurrentChallenges.RA, "3f8f9cadc5");
-		challengeToMailChimpId.put(CurrentChallenges.MUTCALL, "aa8f782347");
 		challengeToMailChimpId.put(CurrentChallenges.TEST, "8c83f36742");
 		challengeToMailChimpId.put(CurrentChallenges.AML, "e709b3bc70");
 		challengeToMailChimpId.put(CurrentChallenges.BROAD_GE, "87b4ede397");
 
 		challengeToApprovedTeamIds = new HashMap<EvaluationMailSyncer.CurrentChallenges, List<String>>();
-		challengeToApprovedTeamIds.put(CurrentChallenges.AD1, Arrays.asList(new String[]{ "2223742" }));
-		challengeToApprovedTeamIds.put(CurrentChallenges.RA, Arrays.asList(new String[]{ "2223746" }));
-		challengeToApprovedTeamIds.put(CurrentChallenges.MUTCALL, Arrays.asList(new String[]{ "2223745" }));
 		challengeToApprovedTeamIds.put(CurrentChallenges.TEST, Arrays.asList(new String[]{ "2223779" }));
 		challengeToApprovedTeamIds.put(CurrentChallenges.AML, Arrays.asList(new String[]{ "3320952" }));
 		challengeToApprovedTeamIds.put(CurrentChallenges.BROAD_GE, Arrays.asList(new String[]{ "3320950" }));
 
 		challengeToUnapprovedMailChimpId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
-		challengeToUnapprovedMailChimpId.put(CurrentChallenges.AD1, "644d60525c");
-		challengeToUnapprovedMailChimpId.put(CurrentChallenges.RA, "2fd37b3bf3");
-		challengeToUnapprovedMailChimpId.put(CurrentChallenges.MUTCALL, "48d7e03a2c");
 		challengeToUnapprovedMailChimpId.put(CurrentChallenges.TEST, "46c14b1884");
 		challengeToUnapprovedMailChimpId.put(CurrentChallenges.AML, "ab99ff9a9c");
 		challengeToUnapprovedMailChimpId.put(CurrentChallenges.BROAD_GE, "ac82946ea5");
 		
 		challengeToAllRegisteredTeamId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
-		challengeToAllRegisteredTeamId.put(CurrentChallenges.AD1, "2223741");
-		challengeToAllRegisteredTeamId.put(CurrentChallenges.RA, "2223744");
-		challengeToAllRegisteredTeamId.put(CurrentChallenges.MUTCALL, "2223743");
 		challengeToAllRegisteredTeamId.put(CurrentChallenges.TEST, "2223780");
 		challengeToAllRegisteredTeamId.put(CurrentChallenges.AML, "3320951");
 		challengeToAllRegisteredTeamId.put(CurrentChallenges.BROAD_GE, "3320949");
