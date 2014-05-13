@@ -39,7 +39,7 @@ import com.ecwid.mailchimp.method.v1_3.list.ShortMemberInfo;
 public class EvaluationMailSyncer {
 	
 	static private Log log = LogFactory.getLog(EvaluationMailSyncer.class);
-	static private enum CurrentChallenges { AML, BROAD_GE, TEST };	
+	static private enum CurrentChallenges { AML, BROAD_GE };	
 	static private final String OVERALL_DREAM_MAILCHIMP_LIST_ID = "8ef794accf";
 	
 	String mailChimpApiKey;
@@ -63,28 +63,23 @@ public class EvaluationMailSyncer {
 		synapse.login(synapseUsername, synapsePassword);
 		
 		approvedUserEmails = new HashMap<EvaluationMailSyncer.CurrentChallenges, Set<String>>();
-		approvedUserEmails.put(CurrentChallenges.TEST, new HashSet<String>());
 		approvedUserEmails.put(CurrentChallenges.AML, new HashSet<String>());
 		approvedUserEmails.put(CurrentChallenges.BROAD_GE, new HashSet<String>());
 
 		
 		challengeToMailChimpId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
-		challengeToMailChimpId.put(CurrentChallenges.TEST, "8c83f36742");
 		challengeToMailChimpId.put(CurrentChallenges.AML, "e709b3bc70");
 		challengeToMailChimpId.put(CurrentChallenges.BROAD_GE, "87b4ede397");
 
 		challengeToApprovedTeamIds = new HashMap<EvaluationMailSyncer.CurrentChallenges, List<String>>();
-		challengeToApprovedTeamIds.put(CurrentChallenges.TEST, Arrays.asList(new String[]{ "2223779" }));
 		challengeToApprovedTeamIds.put(CurrentChallenges.AML, Arrays.asList(new String[]{ "3320952" }));
 		challengeToApprovedTeamIds.put(CurrentChallenges.BROAD_GE, Arrays.asList(new String[]{ "3320950" }));
 
 		challengeToUnapprovedMailChimpId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
-		challengeToUnapprovedMailChimpId.put(CurrentChallenges.TEST, "46c14b1884");
 		challengeToUnapprovedMailChimpId.put(CurrentChallenges.AML, "ab99ff9a9c");
 		challengeToUnapprovedMailChimpId.put(CurrentChallenges.BROAD_GE, "ac82946ea5");
 		
 		challengeToAllRegisteredTeamId = new HashMap<EvaluationMailSyncer.CurrentChallenges, String>();
-		challengeToAllRegisteredTeamId.put(CurrentChallenges.TEST, "2223780");
 		challengeToAllRegisteredTeamId.put(CurrentChallenges.AML, "3320951");
 		challengeToAllRegisteredTeamId.put(CurrentChallenges.BROAD_GE, "3320949");
 		
