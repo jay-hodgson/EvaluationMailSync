@@ -11,7 +11,6 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.sagebionetworks.StackConfiguration;
 import org.sagebionetworks.client.SynapseClient;
 import org.sagebionetworks.client.SynapseClientImpl;
 import org.sagebionetworks.client.exceptions.SynapseException;
@@ -153,29 +152,37 @@ public class EvaluationMailSyncer {
 			PaginatedResults<TeamMember> batch = synapse.getTeamMembers(team.getId(), null, limit, offset);
 			total = batch.getTotalNumberOfResults();
 			List<MailChimpObject> mcBatch = new ArrayList<MailChimpObject>();
+			//get all user profiles
+			List<Long> userIds = new ArrayList<Long>();
 			for(TeamMember participant : batch.getResults()) {
 				try {
-					// get user's email and if not in email list already, add
 					if(participant.getMember().getIsIndividual()) {
-						UserProfile userProfile = synapse.getUserProfile(participant.getMember().getOwnerId());
-						String participantEmail = userProfile.getEmail();
-						if(participantEmail == null && userProfile.getEmails() != null && userProfile.getEmails().size() > 0)
-							participantEmail = userProfile.getEmails().get(0);
-
-						if(isApproved) approvedUserEmails.get(challenge).add(participantEmail); // add approved participants
-						if(participantEmail != null && !listEmails.contains(participantEmail)) {
-							if(!isApproved && approvedUserEmails.containsKey(participantEmail)) continue;
-							MailChimpObject obj = new MailChimpObject();
-							obj.put("EMAIL", participantEmail);					
-							obj.put("EMAIL_TYPE", "html");
-							obj.put("FNAME", userProfile.getFirstName());
-							obj.put("LNAME", userProfile.getLastName());
-							mcBatch.add(obj);
-							toAdd++;
-						}
+						userIds.add(Long.parseLong(participant.getMember().getOwnerId()));
 					}
-				} catch (SynapseException e) {
+				} catch (Exception e) {
 					log.error("Error retrieving user: "+ participant.getMember().getOwnerId(), e);
+				}
+			}
+			List<UserProfile> userProfiles = synapse.listUserProfiles(userIds);
+			for(UserProfile userProfile : userProfiles) {
+				try {
+					String participantEmail = userProfile.getEmails().get(0);
+					if(participantEmail == null && userProfile.getEmails() != null && userProfile.getEmails().size() > 0)
+						participantEmail = userProfile.getEmails().get(0);
+
+					if(isApproved) approvedUserEmails.get(challenge).add(participantEmail); // add approved participants
+					if(participantEmail != null && !listEmails.contains(participantEmail)) {
+						if(!isApproved && approvedUserEmails.containsKey(participantEmail)) continue;
+						MailChimpObject obj = new MailChimpObject();
+						obj.put("EMAIL", participantEmail);					
+						obj.put("EMAIL_TYPE", "html");
+						obj.put("FNAME", userProfile.getFirstName());
+						obj.put("LNAME", userProfile.getLastName());
+						mcBatch.add(obj);
+						toAdd++;
+					}
+				} catch (Exception e) {
+					log.error("Error retrieving user: "+ userProfile.getOwnerId(), e);
 				}
 			}
 
